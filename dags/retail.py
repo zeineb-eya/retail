@@ -4,8 +4,9 @@ from airflow.providers.google.cloud.transfers.local_to_gcs import LocalFilesyste
 from airflow.providers.google.cloud.operators.bigquery import BigQueryCreateEmptyDatasetOperator
 from astro import sql as aql
 from astro.files import File
+from airflow.models.baseoperator import chain
 from astro.sql.table import Table, Metadata
-from astro.contants import FileType
+from astro.constants import FileType
 from include.dbt.cosmos_config import DBT_PROJECT_CONFIG, DBT_CONFIG
 from cosmos.airflow.task_group import DbtTaskGroup
 from cosmos.constants import LoadMode
@@ -55,8 +56,6 @@ def retail():
         from include.soda.check_function import check
 
         return check(scan_name, checks_subpath)
-    check_load()
-    
     
     transform = DbtTaskGroup(
             group_id='transform',
@@ -73,7 +72,6 @@ def retail():
         from include.soda.check_function import check
 
         return check(scan_name, checks_subpath)    
-    check_transform()
     
     report = DbtTaskGroup(
         group_id='report',
@@ -90,6 +88,15 @@ def retail():
         from include.soda.check_function import check
 
         return check(scan_name, checks_subpath)
-    check_report()
     
+    chain(
+        upload_csv_to_gcs,
+        create_retail_dataset,
+        gcs_to_raw,
+        check_load(),
+        transform,
+        check_transform(),
+        report,
+        check_report(),
+    )
 retail()
